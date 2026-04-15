@@ -1,6 +1,6 @@
-import * as pdfjsLib from './vendor/pdf.min.mjs';
+import * as pdfjsLib from './vendor/pdf.min.mjs?v=5';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', window.location.href).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs?v=5', window.location.href).toString();
 
 const drawingPattern = /HLY\d{2}-\d{3}-\d{4}/i;
 const revisionPattern = /[A-Z]\.\d+/i;
@@ -36,7 +36,7 @@ function setStatus(message) {
 function ensureLibraries() {
   const ok = typeof window.PDFLib !== 'undefined' && typeof window.JSZip !== 'undefined';
   if (!ok) {
-    setStatus('Missing browser libraries. Wait for the GitHub Actions deployment to finish, then refresh.');
+    setStatus('Missing browser libraries. Wait for GitHub Actions deployment to finish, then refresh with Ctrl + F5.');
   }
   return ok;
 }
@@ -81,6 +81,7 @@ function extractInfo(text) {
 
 async function loadPdf() {
   if (!ensureLibraries()) return false;
+
   const file = els.pdfFile.files[0];
   if (!file) {
     setStatus('Please choose a PDF file.');
@@ -88,11 +89,7 @@ async function loadPdf() {
   }
 
   const fileBuffer = await file.arrayBuffer();
-
-  // Keep one safe copy for pdf-lib later
   pdfBytes = fileBuffer.slice(0);
-
-  // Give pdf.js its own independent copy
   const pdfJsBuffer = fileBuffer.slice(0);
 
   pdfJsDoc = await pdfjsLib.getDocument({ data: pdfJsBuffer }).promise;
@@ -106,7 +103,7 @@ async function loadPdf() {
   return true;
 }
 
-async function getPageTextAndViewport(pageNumber) {
+async function getPageData(pageNumber) {
   const page = await pdfJsDoc.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1.6 });
   const textContent = await page.getTextContent();
@@ -123,32 +120,40 @@ function scanRectPx(viewport) {
   };
 }
 
-function textInsideRect(items, rect) {
+function getItemViewportRect(item, viewport) {
+  const x = item.transform[4];
+  const y = item.transform[5];
+  const width = item.width || 0;
+  const height = item.height || Math.abs(item.transform[3]) || 10;
+
+  const p1 = viewport.convertToViewportPoint(x, y);
+  const p2 = viewport.convertToViewportPoint(x + width, y + height);
+
+  return {
+    left: Math.min(p1[0], p2[0]),
+    right: Math.max(p1[0], p2[0]),
+    top: Math.min(p1[1], p2[1]),
+    bottom: Math.max(p1[1], p2[1])
+  };
+}
+
+function rectsOverlap(a, b) {
+  return !(
+    a.right < b.x ||
+    a.left > b.x + b.width ||
+    a.bottom < b.y ||
+    a.top > b.y + b.height
+  );
+}
+
+function textInsideRect(items, rectPx, viewport) {
   const parts = [];
-
   for (const item of items) {
-    const x = item.transform[4];
-    const y = item.transform[5];
-    const itemWidth = item.width || 0;
-    const itemHeight = Math.abs(item.transform[3]) || 10;
-
-    const left = x;
-    const right = x + itemWidth;
-    const bottom = y;
-    const top = y + itemHeight;
-
-    const overlaps = !(
-      right < rect.left ||
-      left > rect.right ||
-      top < rect.bottom ||
-      bottom > rect.top
-    );
-
-    if (overlaps) {
+    const itemRect = getItemViewportRect(item, viewport);
+    if (rectsOverlap(itemRect, rectPx)) {
       parts.push(item.str);
     }
   }
-
   return parts.join(' ');
 }
 
@@ -158,28 +163,26 @@ async function previewPage() {
   const pageNumber = Math.max(1, Math.min(Number(els.pageNumber.value || 1), pdfJsDoc.numPages));
   els.pageNumber.value = String(pageNumber);
 
-  const { page, viewport, textContent } = await getPageTextAndViewport(pageNumber);
+  const { page, viewport, textContent } = await getPageData(pageNumber);
   const canvas = els.previewCanvas;
   const ctx = canvas.getContext('2d');
 
   canvas.width = viewport.width;
   canvas.height = viewport.height;
+
   await page.render({ canvasContext: ctx, viewport }).promise;
 
   const rectPx = scanRectPx(viewport);
+
   ctx.save();
   ctx.fillStyle = 'rgba(255, 0, 0, 0.18)';
   ctx.strokeStyle = 'rgba(255, 0, 0, 0.95)';
   ctx.lineWidth = 3;
-  ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-  ctx.restore();
-
   ctx.fillRect(rectPx.x, rectPx.y, rectPx.width, rectPx.height);
   ctx.strokeRect(rectPx.x, rectPx.y, rectPx.width, rectPx.height);
+  ctx.restore();
 
-  const rectPdf = scanRectPdf(page);
-  const rawText = textInsideRect(textContent.items, rectPdf);
+  const rawText = textInsideRect(textContent.items, rectPx, viewport);
   const info = extractInfo(rawText);
 
   els.docNumber.textContent = info.document_number || '<not found>';
@@ -213,7 +216,7 @@ async function splitPdf() {
   setStatus('Splitting PDF and building ZIP...');
 
   try {
-    const srcPdf = await window.PDFLib.PDFDocument.load(pdfBytes);
+    const srcPdf = await window.PDFLib.PDFDocument.load(pdfBytes.slice(0));
     const zip = new window.JSZip();
     const rows = [];
     const usedNames = new Map();
@@ -221,13 +224,9 @@ async function splitPdf() {
     for (let i = 1; i <= pdfJsDoc.numPages; i++) {
       setStatus(`Processing page ${i} of ${pdfJsDoc.numPages}...`);
 
-      const { textContent, viewport } = await getPageTextAndViewport(i);
-      const pageObj = await pdfJsDoc.getPage(i);
-      const viewport = pageObj.getViewport({ scale: 1.6 });
-      const textContent = await pageObj.getTextContent();
-
-      const rectPdf = scanRectPdf(pageObj);
-      const rawText = textInsideRect(textContent.items, rectPdf);
+      const { viewport, textContent } = await getPageData(i);
+      const rectPx = scanRectPx(viewport);
+      const rawText = textInsideRect(textContent.items, rectPx, viewport);
       const info = extractInfo(rawText);
 
       let docNumber = info.document_number || `UNKNOWN_DRAWING_PAGE_${String(i).padStart(3, '0')}`;
@@ -260,7 +259,7 @@ async function splitPdf() {
       'document_number,revision,output_filename',
       ...rows.map(r =>
         [r.document_number, r.revision, r.output_filename]
-          .map(v => `\"${String(v).replace(/\"/g, '\"\"')}\"`)
+          .map(v => `"${String(v).replace(/"/g, '""')}"`)
           .join(',')
       )
     ].join('\r\n');
@@ -279,29 +278,6 @@ async function splitPdf() {
     els.splitBtn.disabled = false;
     els.previewBtn.disabled = false;
   }
-}
-
-function scanRectPdf(page) {
-  const ratios = ratioValues();
-
-  const [xMin, yMin, xMax, yMax] = page.view;
-  const width = xMax - xMin;
-  const height = yMax - yMin;
-
-  const left = xMin + width * ratios.left;
-  const right = xMin + width * ratios.right;
-
-  // Ratios are from the TOP of the page in UI,
-  // but PDF coordinates are from the BOTTOM.
-  const top = yMin + height * (1 - ratios.top);
-  const bottom = yMin + height * (1 - ratios.bottom);
-
-  return {
-    left: Math.min(left, right),
-    right: Math.max(left, right),
-    bottom: Math.min(bottom, top),
-    top: Math.max(bottom, top)
-  };
 }
 
 function renderResultTable(rows) {
@@ -362,4 +338,4 @@ els.previewBtn.addEventListener('click', async () => {
 
 els.splitBtn.addEventListener('click', splitPdf);
 updateRatioLabels();
-setStatus('Ready. After the GitHub Actions deployment finishes, hard refresh the page with Ctrl + F5.');
+setStatus('Ready. After deployment finishes, hard refresh the page with Ctrl + F5.');
