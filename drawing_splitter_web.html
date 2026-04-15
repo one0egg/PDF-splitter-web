@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drawing PDF Splitter</title>
+  <style>
+    :root {
+      --border: #d0d7de;
+      --bg: #f6f8fa;
+      --text: #24292f;
+      --muted: #57606a;
+      --accent: #0969da;
+      --panel: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 0 16px 32px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 180px 1fr 72px;
+      gap: 10px;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .controls label {
+      font-weight: 600;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    input[type="file"], input[type="number"], button {
+      font: inherit;
+    }
+    input[type="number"] {
+      width: 96px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+      cursor: pointer;
+    }
+    button.primary {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .preview-wrap {
+      overflow: auto;
+      max-height: 70vh;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+      padding: 8px;
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+      background: white;
+    }
+    .kv {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 8px 12px;
+      margin-top: 12px;
+    }
+    .kv div:nth-child(odd) {
+      font-weight: 600;
+    }
+    .status {
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+      min-height: 20px;
+    }
+    .note {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-top: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 10px;
+      text-align: left;
+      font-size: 14px;
+    }
+    th {
+      background: #f0f4f8;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: 140px 1fr 64px; }
+      .kv { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Drawing PDF Splitter</h1>
+      <p>Open a combined PDF in your browser, define the scan rectangle, preview the highlighted scan area, extract drawing number and revision, then download split PDFs plus a CSV register.</p>
+      <p class="note">This runs locally in the browser. No installation needed. You can save this file and open it in Edge or Chrome.</p>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <div class="row">
+            <input id="pdfFile" type="file" accept="application/pdf" />
+            <label>Page <input id="pageNumber" type="number" min="1" value="1" /></label>
+            <button id="previewBtn">Preview</button>
+            <button id="splitBtn" class="primary">Split PDF</button>
+          </div>
+          <div class="status" id="status">Select a searchable PDF to start.</div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;">Scan Rectangle</h3>
+          <div class="controls">
+            <label for="leftRatio">Left ratio</label>
+            <input id="leftRatio" type="range" min="0" max="1" step="0.01" value="0.62" />
+            <span id="leftRatioVal">0.62</span>
+          </div>
+          <div class="controls">
+            <label for="rightRatio">Right ratio</label>
+            <input id="rightRatio" type="range" min="0" max="1" step="0.01" value="1.00" />
+            <span id="rightRatioVal">1.00</span>
+          </div>
+          <div class="controls">
+            <label for="topRatio">Top ratio</label>
+            <input id="topRatio" type="range" min="0" max="1" step="0.01" value="0.72" />
+            <span id="topRatioVal">0.72</span>
+          </div>
+          <div class="controls">
+            <label for="bottomRatio">Bottom ratio</label>
+            <input id="bottomRatio" type="range" min="0" max="1" step="0.01" value="1.00" />
+            <span id="bottomRatioVal">1.00</span>
+          </div>
+          <p class="note">The red rectangle shows exactly where text is being read from the page.</p>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-top:0;">Detection</h3>
+          <div class="kv">
+            <div>Detected document number</div><div id="docNumber">-</div>
+            <div>Detected revision</div><div id="revision">-</div>
+            <div>Raw text from scan area</div><div id="rawText" style="white-space: pre-wrap; word-break: break-word;">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3 style="margin-top:0;">Preview</h3>
+          <div class="preview-wrap">
+            <canvas id="previewCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Output Register Preview</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>document_number</th>
+              <th>revision</th>
+              <th>output_filename</th>
+            </tr>
+          </thead>
+          <tbody id="resultTableBody">
+            <tr><td colspan="3">No output yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js';
+
+    const drawingPattern = /HLY\d{2}-\d{3}-\d{4}/i;
+    const revisionPattern = /[A-Z]\.\d+/i;
+
+    const els = {
+      pdfFile: document.getElementById('pdfFile'),
+      pageNumber: document.getElementById('pageNumber'),
+      previewBtn: document.getElementById('previewBtn'),
+      splitBtn: document.getElementById('splitBtn'),
+      status: document.getElementById('status'),
+      previewCanvas: document.getElementById('previewCanvas'),
+      docNumber: document.getElementById('docNumber'),
+      revision: document.getElementById('revision'),
+      rawText: document.getElementById('rawText'),
+      resultTableBody: document.getElementById('resultTableBody'),
+      leftRatio: document.getElementById('leftRatio'),
+      rightRatio: document.getElementById('rightRatio'),
+      topRatio: document.getElementById('topRatio'),
+      bottomRatio: document.getElementById('bottomRatio'),
+      leftRatioVal: document.getElementById('leftRatioVal'),
+      rightRatioVal: document.getElementById('rightRatioVal'),
+      topRatioVal: document.getElementById('topRatioVal'),
+      bottomRatioVal: document.getElementById('bottomRatioVal')
+    };
+
+    let pdfBytes = null;
+    let pdfJsDoc = null;
+
+    function setStatus(message) {
+      els.status.textContent = message;
+    }
+
+    function ratioValues() {
+      const left = Number(els.leftRatio.value);
+      const right = Number(els.rightRatio.value);
+      const top = Number(els.topRatio.value);
+      const bottom = Number(els.bottomRatio.value);
+      return {
+        left: Math.min(left, right),
+        right: Math.max(left, right),
+        top: Math.min(top, bottom),
+        bottom: Math.max(top, bottom)
+      };
+    }
+
+    function updateRatioLabels() {
+      els.leftRatioVal.textContent = Number(els.leftRatio.value).toFixed(2);
+      els.rightRatioVal.textContent = Number(els.rightRatio.value).toFixed(2);
+      els.topRatioVal.textContent = Number(els.topRatio.value).toFixed(2);
+      els.bottomRatioVal.textContent = Number(els.bottomRatio.value).toFixed(2);
+    }
+
+    function normalizeText(text) {
+      return (text || '')
+        .toUpperCase()
+        .replace(/—/g, '-')
+        .replace(/_/g, '-')
+        .replace(/\s+/g, '');
+    }
+
+    function extractInfo(text) {
+      const cleaned = normalizeText(text);
+      const docMatch = cleaned.match(drawingPattern);
+      const revMatch = cleaned.match(revisionPattern);
+      return {
+        document_number: docMatch ? docMatch[0].toUpperCase() : '',
+        revision: revMatch ? revMatch[0].toUpperCase() : ''
+      };
+    }
+
+    async function loadPdf() {
+      const file = els.pdfFile.files[0];
+      if (!file) {
+        setStatus('Please choose a PDF file.');
+        return false;
+      }
+      pdfBytes = await file.arrayBuffer();
+      pdfJsDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+      els.pageNumber.max = pdfJsDoc.numPages;
+      els.pageNumber.value = '1';
+      setStatus(`Loaded PDF with ${pdfJsDoc.numPages} page(s).`);
+      return true;
+    }
+
+    async function getPageTextAndViewport(pageNumber) {
+      const page = await pdfJsDoc.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1.6 });
+      const textContent = await page.getTextContent();
+      return { page, viewport, textContent };
+    }
+
+    function scanRectPx(viewport) {
+      const ratios = ratioValues();
+      return {
+        x: viewport.width * ratios.left,
+        y: viewport.height * ratios.top,
+        width: viewport.width * (ratios.right - ratios.left),
+        height: viewport.height * (ratios.bottom - ratios.top)
+      };
+    }
+
+    function textInsideRect(items, rect) {
+      const parts = [];
+      for (const item of items) {
+        const tx = item.transform[4];
+        const ty = item.transform[5];
+        const x = tx;
+        const y = rect.height !== undefined ? ty : ty;
+        const itemWidth = item.width || 0;
+        const itemHeight = Math.abs(item.transform[3]) || 10;
+        const left = x;
+        const right = x + itemWidth;
+        const top = y - itemHeight;
+        const bottom = y;
+
+        const overlaps = !(right < rect.x || left > rect.x + rect.width || bottom < rect.y || top > rect.y + rect.height);
+        if (overlaps) {
+          parts.push(item.str);
+        }
+      }
+      return parts.join(' ');
+    }
+
+    async function previewPage() {
+      if (!pdfJsDoc && !(await loadPdf())) return;
+
+      const pageNumber = Math.max(1, Math.min(Number(els.pageNumber.value || 1), pdfJsDoc.numPages));
+      els.pageNumber.value = String(pageNumber);
+
+      const { page, viewport, textContent } = await getPageTextAndViewport(pageNumber);
+      const canvas = els.previewCanvas;
+      const ctx = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const rect = scanRectPx(viewport);
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.18)';
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.95)';
+      ctx.lineWidth = 3;
+      ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      ctx.restore();
+
+      const rawText = textInsideRect(textContent.items, rect);
+      const info = extractInfo(rawText);
+
+      els.docNumber.textContent = info.document_number || '<not found>';
+      els.revision.textContent = info.revision || '<not found>';
+      els.rawText.textContent = rawText || '<no text found in selected area>';
+      setStatus(`Previewed page ${pageNumber} of ${pdfJsDoc.numPages}.`);
+    }
+
+    function safeFilename(name) {
+      return (name || 'DRAWING')
+        .toUpperCase()
+        .replace(/[\\/]/g, '-')
+        .replace(/[^A-Z0-9._-]+/g, '_')
+        .replace(/^[_\-.]+|[_\-.]+$/g, '') || 'DRAWING';
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    async function splitPdf() {
+      if (!pdfJsDoc && !(await loadPdf())) return;
+
+      els.splitBtn.disabled = true;
+      els.previewBtn.disabled = true;
+      setStatus('Splitting PDF and building ZIP...');
+
+      try {
+        const srcPdf = await PDFLib.PDFDocument.load(pdfBytes);
+        const zip = new JSZip();
+        const rows = [];
+        const usedNames = new Map();
+
+        for (let i = 1; i <= pdfJsDoc.numPages; i++) {
+          setStatus(`Processing page ${i} of ${pdfJsDoc.numPages}...`);
+          const { textContent, viewport } = await getPageTextAndViewport(i);
+          const rect = scanRectPx(viewport);
+          const rawText = textInsideRect(textContent.items, rect);
+          const info = extractInfo(rawText);
+
+          let docNumber = info.document_number || `UNKNOWN_DRAWING_PAGE_${String(i).padStart(3, '0')}`;
+          const revision = info.revision || '';
+
+          let fileBase = safeFilename(docNumber);
+          if (usedNames.has(fileBase)) {
+            const next = usedNames.get(fileBase) + 1;
+            usedNames.set(fileBase, next);
+            fileBase = `${fileBase}_DUP_${String(next).padStart(2, '0')}`;
+          } else {
+            usedNames.set(fileBase, 1);
+          }
+
+          const outPdf = await PDFLib.PDFDocument.create();
+          const [copied] = await outPdf.copyPages(srcPdf, [i - 1]);
+          outPdf.addPage(copied);
+          const bytes = await outPdf.save();
+          const filename = `${fileBase}.pdf`;
+          zip.file(filename, bytes);
+
+          rows.push({
+            document_number: docNumber,
+            revision,
+            output_filename: filename
+          });
+        }
+
+        const csv = [
+          'document_number,revision,output_filename',
+          ...rows.map(r => [r.document_number, r.revision, r.output_filename].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+        ].join('\r\n');
+
+        zip.file('split_register.csv', csv);
+        renderResultTable(rows);
+
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const sourceName = (els.pdfFile.files[0]?.name || 'drawing_split').replace(/\.pdf$/i, '');
+        downloadBlob(blob, `${sourceName}_split_output.zip`);
+        setStatus(`Done. Downloaded ZIP with ${rows.length} split PDF(s) and split_register.csv.`);
+      } catch (error) {
+        console.error(error);
+        setStatus(`Error: ${error.message}`);
+      } finally {
+        els.splitBtn.disabled = false;
+        els.previewBtn.disabled = false;
+      }
+    }
+
+    function renderResultTable(rows) {
+      if (!rows.length) {
+        els.resultTableBody.innerHTML = '<tr><td colspan="3">No output yet.</td></tr>';
+        return;
+      }
+      els.resultTableBody.innerHTML = rows.map(r => `
+        <tr>
+          <td>${escapeHtml(r.document_number)}</td>
+          <td>${escapeHtml(r.revision)}</td>
+          <td>${escapeHtml(r.output_filename)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    els.pdfFile.addEventListener('change', async () => {
+      try {
+        await loadPdf();
+        await previewPage();
+      } catch (error) {
+        console.error(error);
+        setStatus(`Error: ${error.message}`);
+      }
+    });
+
+    for (const el of [els.leftRatio, els.rightRatio, els.topRatio, els.bottomRatio]) {
+      el.addEventListener('input', async () => {
+        updateRatioLabels();
+        if (pdfJsDoc) {
+          try {
+            await previewPage();
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      });
+    }
+
+    els.previewBtn.addEventListener('click', async () => {
+      try {
+        await previewPage();
+      } catch (error) {
+        console.error(error);
+        setStatus(`Error: ${error.message}`);
+      }
+    });
+
+    els.splitBtn.addEventListener('click', splitPdf);
+    updateRatioLabels();
+  </script>
+</body>
+</html>
