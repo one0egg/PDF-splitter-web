@@ -1,6 +1,6 @@
 import * as pdfjsLib from './vendor/pdf.min.mjs';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', window.location.href).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
 
 const drawingPattern = /HLY\d{2}-\d{3}-\d{4}/i;
 const revisionPattern = /[A-Z]\.\d+/i;
