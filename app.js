@@ -87,8 +87,15 @@ async function loadPdf() {
     return false;
   }
 
-  pdfBytes = await file.arrayBuffer();
-  pdfJsDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+  const fileBuffer = await file.arrayBuffer();
+
+  // Keep one safe copy for pdf-lib later
+  pdfBytes = fileBuffer.slice(0);
+
+  // Give pdf.js its own independent copy
+  const pdfJsBuffer = fileBuffer.slice(0);
+
+  pdfJsDoc = await pdfjsLib.getDocument({ data: pdfJsBuffer }).promise;
   els.pageNumber.max = pdfJsDoc.numPages;
 
   if (Number(els.pageNumber.value) > pdfJsDoc.numPages) {
@@ -118,6 +125,7 @@ function scanRectPx(viewport) {
 
 function textInsideRect(items, rect) {
   const parts = [];
+
   for (const item of items) {
     const x = item.transform[4];
     const y = item.transform[5];
@@ -126,14 +134,21 @@ function textInsideRect(items, rect) {
 
     const left = x;
     const right = x + itemWidth;
-    const top = y - itemHeight;
     const bottom = y;
+    const top = y + itemHeight;
 
-    const overlaps = !(right < rect.x || left > rect.x + rect.width || bottom < rect.y || top > rect.y + rect.height);
+    const overlaps = !(
+      right < rect.left ||
+      left > rect.right ||
+      top < rect.bottom ||
+      bottom > rect.top
+    );
+
     if (overlaps) {
       parts.push(item.str);
     }
   }
+
   return parts.join(' ');
 }
 
@@ -151,7 +166,7 @@ async function previewPage() {
   canvas.height = viewport.height;
   await page.render({ canvasContext: ctx, viewport }).promise;
 
-  const rect = scanRectPx(viewport);
+  const rectPx = scanRectPx(viewport);
   ctx.save();
   ctx.fillStyle = 'rgba(255, 0, 0, 0.18)';
   ctx.strokeStyle = 'rgba(255, 0, 0, 0.95)';
@@ -160,7 +175,11 @@ async function previewPage() {
   ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
   ctx.restore();
 
-  const rawText = textInsideRect(textContent.items, rect);
+  ctx.fillRect(rectPx.x, rectPx.y, rectPx.width, rectPx.height);
+  ctx.strokeRect(rectPx.x, rectPx.y, rectPx.width, rectPx.height);
+
+  const rectPdf = scanRectPdf(page);
+  const rawText = textInsideRect(textContent.items, rectPdf);
   const info = extractInfo(rawText);
 
   els.docNumber.textContent = info.document_number || '<not found>';
@@ -203,8 +222,12 @@ async function splitPdf() {
       setStatus(`Processing page ${i} of ${pdfJsDoc.numPages}...`);
 
       const { textContent, viewport } = await getPageTextAndViewport(i);
-      const rect = scanRectPx(viewport);
-      const rawText = textInsideRect(textContent.items, rect);
+      const pageObj = await pdfJsDoc.getPage(i);
+      const viewport = pageObj.getViewport({ scale: 1.6 });
+      const textContent = await pageObj.getTextContent();
+
+      const rectPdf = scanRectPdf(pageObj);
+      const rawText = textInsideRect(textContent.items, rectPdf);
       const info = extractInfo(rawText);
 
       let docNumber = info.document_number || `UNKNOWN_DRAWING_PAGE_${String(i).padStart(3, '0')}`;
@@ -256,6 +279,29 @@ async function splitPdf() {
     els.splitBtn.disabled = false;
     els.previewBtn.disabled = false;
   }
+}
+
+function scanRectPdf(page) {
+  const ratios = ratioValues();
+
+  const [xMin, yMin, xMax, yMax] = page.view;
+  const width = xMax - xMin;
+  const height = yMax - yMin;
+
+  const left = xMin + width * ratios.left;
+  const right = xMin + width * ratios.right;
+
+  // Ratios are from the TOP of the page in UI,
+  // but PDF coordinates are from the BOTTOM.
+  const top = yMin + height * (1 - ratios.top);
+  const bottom = yMin + height * (1 - ratios.bottom);
+
+  return {
+    left: Math.min(left, right),
+    right: Math.max(left, right),
+    bottom: Math.min(bottom, top),
+    top: Math.max(bottom, top)
+  };
 }
 
 function renderResultTable(rows) {
