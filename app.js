@@ -1,6 +1,6 @@
 import * as pdfjsLib from './vendor/pdf.min.mjs';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', window.location.href).toString();
 
 const drawingPattern = /HLY\d{2}-\d{3}-\d{4}/i;
 const revisionPattern = /[A-Z]\.\d+/i;
@@ -36,7 +36,7 @@ function setStatus(message) {
 function ensureLibraries() {
   const ok = typeof window.PDFLib !== 'undefined' && typeof window.JSZip !== 'undefined';
   if (!ok) {
-    setStatus('Missing vendor library files. Wait for GitHub Pages deploy to finish, or check the workflow.');
+    setStatus('Missing browser libraries. Wait for the GitHub Actions deployment to finish, then refresh.');
   }
   return ok;
 }
@@ -62,7 +62,11 @@ function updateRatioLabels() {
 }
 
 function normalizeText(text) {
-  return (text || '').toUpperCase().replace(/—/g, '-').replace(/_/g, '-').replace(/\s+/g, '');
+  return (text || '')
+    .toUpperCase()
+    .replace(/—/g, '-')
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '');
 }
 
 function extractInfo(text) {
@@ -82,12 +86,15 @@ async function loadPdf() {
     setStatus('Please choose a PDF file.');
     return false;
   }
+
   pdfBytes = await file.arrayBuffer();
   pdfJsDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
   els.pageNumber.max = pdfJsDoc.numPages;
+
   if (Number(els.pageNumber.value) > pdfJsDoc.numPages) {
     els.pageNumber.value = '1';
   }
+
   setStatus(`Loaded PDF with ${pdfJsDoc.numPages} page(s).`);
   return true;
 }
@@ -116,27 +123,32 @@ function textInsideRect(items, rect) {
     const y = item.transform[5];
     const itemWidth = item.width || 0;
     const itemHeight = Math.abs(item.transform[3]) || 10;
+
     const left = x;
     const right = x + itemWidth;
     const top = y - itemHeight;
     const bottom = y;
+
     const overlaps = !(right < rect.x || left > rect.x + rect.width || bottom < rect.y || top > rect.y + rect.height);
-    if (overlaps) parts.push(item.str);
+    if (overlaps) {
+      parts.push(item.str);
+    }
   }
   return parts.join(' ');
 }
 
 async function previewPage() {
   if (!pdfJsDoc && !(await loadPdf())) return;
+
   const pageNumber = Math.max(1, Math.min(Number(els.pageNumber.value || 1), pdfJsDoc.numPages));
   els.pageNumber.value = String(pageNumber);
 
   const { page, viewport, textContent } = await getPageTextAndViewport(pageNumber);
   const canvas = els.previewCanvas;
   const ctx = canvas.getContext('2d');
+
   canvas.width = viewport.width;
   canvas.height = viewport.height;
-
   await page.render({ canvasContext: ctx, viewport }).promise;
 
   const rect = scanRectPx(viewport);
@@ -176,6 +188,7 @@ function downloadBlob(blob, filename) {
 
 async function splitPdf() {
   if (!pdfJsDoc && !(await loadPdf())) return;
+
   els.splitBtn.disabled = true;
   els.previewBtn.disabled = true;
   setStatus('Splitting PDF and building ZIP...');
@@ -188,6 +201,7 @@ async function splitPdf() {
 
     for (let i = 1; i <= pdfJsDoc.numPages; i++) {
       setStatus(`Processing page ${i} of ${pdfJsDoc.numPages}...`);
+
       const { textContent, viewport } = await getPageTextAndViewport(i);
       const rect = scanRectPx(viewport);
       const rawText = textInsideRect(textContent.items, rect);
@@ -212,12 +226,20 @@ async function splitPdf() {
       const filename = `${fileBase}.pdf`;
       zip.file(filename, bytes);
 
-      rows.push({ document_number: docNumber, revision, output_filename: filename });
+      rows.push({
+        document_number: docNumber,
+        revision,
+        output_filename: filename
+      });
     }
 
     const csv = [
       'document_number,revision,output_filename',
-      ...rows.map(r => [r.document_number, r.revision, r.output_filename].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      ...rows.map(r =>
+        [r.document_number, r.revision, r.output_filename]
+          .map(v => `\"${String(v).replace(/\"/g, '\"\"')}\"`)
+          .join(',')
+      )
     ].join('\r\n');
 
     zip.file('split_register.csv', csv);
@@ -241,6 +263,7 @@ function renderResultTable(rows) {
     els.resultTableBody.innerHTML = '<tr><td colspan="3">No output yet.</td></tr>';
     return;
   }
+
   els.resultTableBody.innerHTML = rows.map(r => `
     <tr>
       <td>${escapeHtml(r.document_number)}</td>
@@ -273,15 +296,24 @@ for (const el of [els.leftRatio, els.rightRatio, els.topRatio, els.bottomRatio])
   el.addEventListener('input', async () => {
     updateRatioLabels();
     if (pdfJsDoc) {
-      try { await previewPage(); } catch (error) { console.error(error); }
+      try {
+        await previewPage();
+      } catch (error) {
+        console.error(error);
+      }
     }
   });
 }
 
 els.previewBtn.addEventListener('click', async () => {
-  try { await previewPage(); } catch (error) { console.error(error); setStatus(`Error: ${error.message}`); }
+  try {
+    await previewPage();
+  } catch (error) {
+    console.error(error);
+    setStatus(`Error: ${error.message}`);
+  }
 });
 
 els.splitBtn.addEventListener('click', splitPdf);
 updateRatioLabels();
-setStatus('Ready. After the first Pages deployment, the vendor files will be fetched automatically by GitHub Actions.');
+setStatus('Ready. After the GitHub Actions deployment finishes, hard refresh the page with Ctrl + F5.');
