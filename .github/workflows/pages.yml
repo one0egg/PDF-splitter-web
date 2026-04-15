@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
   pages: write
@@ -30,6 +33,13 @@ jobs:
           curl -L --fail -o vendor/pdf.worker.min.mjs https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.mjs
           curl -L --fail -o vendor/pdf-lib.min.js https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js
           curl -L --fail -o vendor/jszip.min.js https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
+
+      - name: Show downloaded files
+        run: |
+          echo "Repo root:"
+          ls -la
+          echo "Vendor folder:"
+          ls -la vendor
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
