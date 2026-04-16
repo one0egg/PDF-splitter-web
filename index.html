@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Drawing PDF Splitter</title>
   <link rel="stylesheet" href="./style.css" />
-  <script src="./vendor/pdf-lib.min.js?v=5"></script>
-  <script src="./vendor/jszip.min.js?v=5"></script>
+  <script src="./vendor/pdf-lib.min.js?v=6"></script>
+  <script src="./vendor/jszip.min.js?v=6"></script>
 </head>
 <body>
   <div class="wrap">
@@ -26,6 +26,29 @@
             <button id="splitBtn" class="primary">Split PDF</button>
           </div>
           <div class="status" id="status">Select a searchable PDF to start.</div>
+        </div>
+
+        <div class="card">
+          <h3>Detection Pattern</h3>
+          <div class="controls">
+            <label for="drawingPatternInput">Drawing pattern</label>
+            <input id="drawingPatternInput" type="text" value="HLY\d{2}-\d{3}-\d{4}" />
+            <button id="resetPatternsBtn" type="button">Reset</button>
+          </div>
+          <p class="note">Examples: <code>\d</code> = any digit, <code>[A-Z]</code> = any capital letter, <code>\.</code> = actual dot.</p>
+
+          <div class="controls">
+            <label for="revisionPatternInput">Revision pattern</label>
+            <input id="revisionPatternInput" type="text" value="[A-Z]\.\d+" />
+            <span></span>
+          </div>
+          <p class="note">If you need a real special character like <code>.</code> or <code>(</code>, add <code>\</code> before it.</p>
+
+          <div class="pattern-preview">
+            <div><strong>Currently detecting drawing pattern:</strong> <code id="drawingPatternDisplay">HLY\d{2}-\d{3}-\d{4}</code></div>
+            <div><strong>Currently detecting revision pattern:</strong> <code id="revisionPatternDisplay">[A-Z]\.\d+</code></div>
+            <div id="patternError" class="pattern-error"></div>
+          </div>
         </div>
 
         <div class="card">
@@ -92,6 +115,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=5"></script>
+  <script type="module" src="./app.js?v=6"></script>
 </body>
 </html>

@@ -1,9 +1,9 @@
-import * as pdfjsLib from './vendor/pdf.min.mjs?v=5';
+import * as pdfjsLib from './vendor/pdf.min.mjs?v=6';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs?v=5', window.location.href).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs?v=6', window.location.href).toString();
 
-const drawingPattern = /HLY\d{2}-\d{3}-\d{4}/i;
-const revisionPattern = /[A-Z]\.\d+/i;
+const defaultDrawingPattern = 'HLY\\d{2}-\\d{3}-\\d{4}';
+const defaultRevisionPattern = '[A-Z]\\.\\d+';
 
 const els = {
   pdfFile: document.getElementById('pdfFile'),
@@ -23,7 +23,13 @@ const els = {
   leftRatioVal: document.getElementById('leftRatioVal'),
   rightRatioVal: document.getElementById('rightRatioVal'),
   topRatioVal: document.getElementById('topRatioVal'),
-  bottomRatioVal: document.getElementById('bottomRatioVal')
+  bottomRatioVal: document.getElementById('bottomRatioVal'),
+  drawingPatternInput: document.getElementById('drawingPatternInput'),
+  revisionPatternInput: document.getElementById('revisionPatternInput'),
+  drawingPatternDisplay: document.getElementById('drawingPatternDisplay'),
+  revisionPatternDisplay: document.getElementById('revisionPatternDisplay'),
+  patternError: document.getElementById('patternError'),
+  resetPatternsBtn: document.getElementById('resetPatternsBtn')
 };
 
 let pdfBytes = null;
@@ -61,6 +67,24 @@ function updateRatioLabels() {
   els.bottomRatioVal.textContent = Number(els.bottomRatio.value).toFixed(2);
 }
 
+function getActivePatterns() {
+  const drawingSource = els.drawingPatternInput.value.trim();
+  const revisionSource = els.revisionPatternInput.value.trim();
+
+  els.drawingPatternDisplay.textContent = drawingSource || '(empty)';
+  els.revisionPatternDisplay.textContent = revisionSource || '(empty)';
+
+  try {
+    const drawingPattern = new RegExp(drawingSource, 'i');
+    const revisionPattern = new RegExp(revisionSource, 'i');
+    els.patternError.textContent = '';
+    return { drawingPattern, revisionPattern, valid: true };
+  } catch (error) {
+    els.patternError.textContent = `Pattern error: ${error.message}`;
+    return { drawingPattern: null, revisionPattern: null, valid: false };
+  }
+}
+
 function normalizeText(text) {
   return (text || '')
     .toUpperCase()
@@ -70,6 +94,8 @@ function normalizeText(text) {
 }
 
 function extractInfo(text) {
+  const { drawingPattern, revisionPattern, valid } = getActivePatterns();
+  if (!valid) return { document_number: '', revision: '' };
   const cleaned = normalizeText(text);
   const docMatch = cleaned.match(drawingPattern);
   const revMatch = cleaned.match(revisionPattern);
@@ -81,24 +107,17 @@ function extractInfo(text) {
 
 async function loadPdf() {
   if (!ensureLibraries()) return false;
-
   const file = els.pdfFile.files[0];
   if (!file) {
     setStatus('Please choose a PDF file.');
     return false;
   }
-
   const fileBuffer = await file.arrayBuffer();
   pdfBytes = fileBuffer.slice(0);
   const pdfJsBuffer = fileBuffer.slice(0);
-
   pdfJsDoc = await pdfjsLib.getDocument({ data: pdfJsBuffer }).promise;
   els.pageNumber.max = pdfJsDoc.numPages;
-
-  if (Number(els.pageNumber.value) > pdfJsDoc.numPages) {
-    els.pageNumber.value = '1';
-  }
-
+  if (Number(els.pageNumber.value) > pdfJsDoc.numPages) els.pageNumber.value = '1';
   setStatus(`Loaded PDF with ${pdfJsDoc.numPages} page(s).`);
   return true;
 }
@@ -125,10 +144,8 @@ function getItemViewportRect(item, viewport) {
   const y = item.transform[5];
   const width = item.width || 0;
   const height = item.height || Math.abs(item.transform[3]) || 10;
-
   const p1 = viewport.convertToViewportPoint(x, y);
   const p2 = viewport.convertToViewportPoint(x + width, y + height);
-
   return {
     left: Math.min(p1[0], p2[0]),
     right: Math.max(p1[0], p2[0]),
@@ -138,42 +155,29 @@ function getItemViewportRect(item, viewport) {
 }
 
 function rectsOverlap(a, b) {
-  return !(
-    a.right < b.x ||
-    a.left > b.x + b.width ||
-    a.bottom < b.y ||
-    a.top > b.y + b.height
-  );
+  return !(a.right < b.x || a.left > b.x + b.width || a.bottom < b.y || a.top > b.y + b.height);
 }
 
 function textInsideRect(items, rectPx, viewport) {
   const parts = [];
   for (const item of items) {
     const itemRect = getItemViewportRect(item, viewport);
-    if (rectsOverlap(itemRect, rectPx)) {
-      parts.push(item.str);
-    }
+    if (rectsOverlap(itemRect, rectPx)) parts.push(item.str);
   }
   return parts.join(' ');
 }
 
 async function previewPage() {
   if (!pdfJsDoc && !(await loadPdf())) return;
-
   const pageNumber = Math.max(1, Math.min(Number(els.pageNumber.value || 1), pdfJsDoc.numPages));
   els.pageNumber.value = String(pageNumber);
-
   const { page, viewport, textContent } = await getPageData(pageNumber);
   const canvas = els.previewCanvas;
   const ctx = canvas.getContext('2d');
-
   canvas.width = viewport.width;
   canvas.height = viewport.height;
-
   await page.render({ canvasContext: ctx, viewport }).promise;
-
   const rectPx = scanRectPx(viewport);
-
   ctx.save();
   ctx.fillStyle = 'rgba(255, 0, 0, 0.18)';
   ctx.strokeStyle = 'rgba(255, 0, 0, 0.95)';
@@ -181,10 +185,8 @@ async function previewPage() {
   ctx.fillRect(rectPx.x, rectPx.y, rectPx.width, rectPx.height);
   ctx.strokeRect(rectPx.x, rectPx.y, rectPx.width, rectPx.height);
   ctx.restore();
-
   const rawText = textInsideRect(textContent.items, rectPx, viewport);
   const info = extractInfo(rawText);
-
   els.docNumber.textContent = info.document_number || '<not found>';
   els.revision.textContent = info.revision || '<not found>';
   els.rawText.textContent = rawText || '<no text found in selected area>';
@@ -210,28 +212,26 @@ function downloadBlob(blob, filename) {
 
 async function splitPdf() {
   if (!pdfJsDoc && !(await loadPdf())) return;
-
+  if (!getActivePatterns().valid) {
+    setStatus('Please fix the pattern error before splitting.');
+    return;
+  }
   els.splitBtn.disabled = true;
   els.previewBtn.disabled = true;
   setStatus('Splitting PDF and building ZIP...');
-
   try {
     const srcPdf = await window.PDFLib.PDFDocument.load(pdfBytes.slice(0));
     const zip = new window.JSZip();
     const rows = [];
     const usedNames = new Map();
-
     for (let i = 1; i <= pdfJsDoc.numPages; i++) {
       setStatus(`Processing page ${i} of ${pdfJsDoc.numPages}...`);
-
       const { viewport, textContent } = await getPageData(i);
       const rectPx = scanRectPx(viewport);
       const rawText = textInsideRect(textContent.items, rectPx, viewport);
       const info = extractInfo(rawText);
-
       let docNumber = info.document_number || `UNKNOWN_DRAWING_PAGE_${String(i).padStart(3, '0')}`;
       const revision = info.revision || '';
-
       let fileBase = safeFilename(docNumber);
       if (usedNames.has(fileBase)) {
         const next = usedNames.get(fileBase) + 1;
@@ -240,33 +240,17 @@ async function splitPdf() {
       } else {
         usedNames.set(fileBase, 1);
       }
-
       const outPdf = await window.PDFLib.PDFDocument.create();
       const [copied] = await outPdf.copyPages(srcPdf, [i - 1]);
       outPdf.addPage(copied);
       const bytes = await outPdf.save();
       const filename = `${fileBase}.pdf`;
       zip.file(filename, bytes);
-
-      rows.push({
-        document_number: docNumber,
-        revision,
-        output_filename: filename
-      });
+      rows.push({ document_number: docNumber, revision, output_filename: filename });
     }
-
-    const csv = [
-      'document_number,revision,output_filename',
-      ...rows.map(r =>
-        [r.document_number, r.revision, r.output_filename]
-          .map(v => `"${String(v).replace(/"/g, '""')}"`)
-          .join(',')
-      )
-    ].join('\r\n');
-
+    const csv = ['document_number,revision,output_filename', ...rows.map(r => [r.document_number, r.revision, r.output_filename].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\r\n');
     zip.file('split_register.csv', csv);
     renderResultTable(rows);
-
     const blob = await zip.generateAsync({ type: 'blob' });
     const sourceName = (els.pdfFile.files[0]?.name || 'drawing_split').replace(/\.pdf$/i, '');
     downloadBlob(blob, `${sourceName}_split_output.zip`);
@@ -285,7 +269,6 @@ function renderResultTable(rows) {
     els.resultTableBody.innerHTML = '<tr><td colspan="3">No output yet.</td></tr>';
     return;
   }
-
   els.resultTableBody.innerHTML = rows.map(r => `
     <tr>
       <td>${escapeHtml(r.document_number)}</td>
@@ -304,6 +287,17 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function resetPatterns() {
+  els.drawingPatternInput.value = defaultDrawingPattern;
+  els.revisionPatternInput.value = defaultRevisionPattern;
+  getActivePatterns();
+}
+
+async function refreshPreviewIfLoaded() {
+  if (!pdfJsDoc) return;
+  try { await previewPage(); } catch (error) { console.error(error); }
+}
+
 els.pdfFile.addEventListener('change', async () => {
   try {
     await loadPdf();
@@ -317,15 +311,21 @@ els.pdfFile.addEventListener('change', async () => {
 for (const el of [els.leftRatio, els.rightRatio, els.topRatio, els.bottomRatio]) {
   el.addEventListener('input', async () => {
     updateRatioLabels();
-    if (pdfJsDoc) {
-      try {
-        await previewPage();
-      } catch (error) {
-        console.error(error);
-      }
-    }
+    await refreshPreviewIfLoaded();
   });
 }
+
+for (const el of [els.drawingPatternInput, els.revisionPatternInput]) {
+  el.addEventListener('input', async () => {
+    getActivePatterns();
+    await refreshPreviewIfLoaded();
+  });
+}
+
+els.resetPatternsBtn.addEventListener('click', async () => {
+  resetPatterns();
+  await refreshPreviewIfLoaded();
+});
 
 els.previewBtn.addEventListener('click', async () => {
   try {
@@ -338,4 +338,5 @@ els.previewBtn.addEventListener('click', async () => {
 
 els.splitBtn.addEventListener('click', splitPdf);
 updateRatioLabels();
+resetPatterns();
 setStatus('Ready. After deployment finishes, hard refresh the page with Ctrl + F5.');

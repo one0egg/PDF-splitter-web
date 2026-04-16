@@ -1,28 +1,28 @@
 # Drawing PDF Splitter
 
-Fresh rebuild package for GitHub Pages.
+GitHub Pages package with user-editable detection patterns.
 
 ## What is included
-- Corrected worker path handling
-- Cache-busting query strings on the app and vendor script references
-- Safer ArrayBuffer handling to avoid `Cannot perform Construct on a detached ArrayBuffer`
-- Detection based on viewport coordinates so the red preview rectangle and extracted text use the same coordinate space
+- Drawing pattern input
+- Revision pattern input
+- Short help notes under both inputs
+- Live pattern display showing exactly what is currently being matched
+- Reset button to restore default patterns
+- Pattern validation with friendly error message
+- Safer ArrayBuffer handling
 - GitHub Actions workflow that downloads browser libraries automatically
 
-## Files
-- `index.html`
-- `style.css`
-- `app.js`
-- `.github/workflows/pages.yml`
-
 ## Setup
-1. Create a fresh GitHub repository or replace the existing repo files with these.
+1. Replace your repo files with these.
 2. In **Settings → Pages**, choose **GitHub Actions**.
 3. Push to `main`.
 4. Wait for the workflow to finish.
 5. Hard refresh the live page with `Ctrl + F5`.
 
+## Default patterns
+- Drawing: `HLY\d{2}-\d{3}-\d{4}`
+- Revision: `[A-Z]\.\d+`
+
 ## Notes
 - The PDF must already be searchable.
 - No OCR is included.
-- If no drawing number is found, the export filename falls back to `UNKNOWN_DRAWING_PAGE_001.pdf`.
