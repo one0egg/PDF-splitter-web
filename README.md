@@ -1,12 +1,15 @@
 # Drawing PDF Splitter
 
-GitHub Pages package with user-editable detection patterns.
+GitHub Pages package with user-editable detection patterns and readable pattern display.
 
 ## What is included
 - Drawing pattern input
 - Revision pattern input
 - Short help notes under both inputs
-- Live pattern display showing exactly what is currently being matched
+- Live readable pattern display
+- Blue/green alternating `Letter` badges for continuous letter groups
+- `#` for digits
+- Raw regex shown underneath
 - Reset button to restore default patterns
 - Pattern validation with friendly error message
 - Safer ArrayBuffer handling
