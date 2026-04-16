@@ -1,6 +1,6 @@
-import * as pdfjsLib from './vendor/pdf.min.mjs?v=8';
+import * as pdfjsLib from './vendor/pdf.min.mjs?v=9';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs?v=8', window.location.href).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs?v=9', window.location.href).toString();
 
 const defaultDrawingPattern = 'HLY\\d{2}-\\d{3}-\\d{4}';
 const defaultRevisionPattern = '[A-Z]\\.\\d+';
@@ -79,72 +79,85 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function pushLetterBadge(parts, letterRunIndex) {
+  const cls = (letterRunIndex % 2 === 0) ? 'letter-blue' : 'letter-green';
+  parts.push(`<span class="letter-badge ${cls}">Letter</span>`);
+}
+
 function readablePatternHtml(source) {
-  let html = '';
+  const parts = [];
   let i = 0;
   let letterRunIndex = 0;
+
   while (i < source.length) {
     if (source.startsWith('[A-Z]{', i)) {
       const match = source.slice(i).match(/^\[A-Z\]\{(\d+)\}/);
       if (match) {
         const count = Number(match[1]);
         for (let n = 0; n < count; n++) {
-          const cls = (letterRunIndex % 2 === 0) ? 'letter-blue' : 'letter-green';
-          html += `<span class="letter-badge ${cls}">Letter</span>`;
+          pushLetterBadge(parts, letterRunIndex);
           letterRunIndex += 1;
         }
         i += match[0].length;
         continue;
       }
     }
+
     if (source.startsWith('[A-Z]', i)) {
-      const cls = (letterRunIndex % 2 === 0) ? 'letter-blue' : 'letter-green';
-      html += `<span class="letter-badge ${cls}">Letter</span>`;
+      pushLetterBadge(parts, letterRunIndex);
       letterRunIndex += 1;
       i += '[A-Z]'.length;
       continue;
     }
+
     if (source.startsWith('\\d{', i)) {
       const match = source.slice(i).match(/^\\d\{(\d+)\}/);
       if (match) {
-        html += `<span class="readable-token">${'#'.repeat(Number(match[1]))}</span>`;
+        parts.push(`<span class="readable-token">${'#'.repeat(Number(match[1]))}</span>`);
         letterRunIndex = 0;
         i += match[0].length;
         continue;
       }
     }
+
     if (source.startsWith('\\d+', i)) {
-      html += `<span class="readable-token">#</span>`;
+      parts.push('<span class="readable-token">#</span>');
       letterRunIndex = 0;
       i += '\\d+'.length;
       continue;
     }
+
     if (source.startsWith('\\d', i)) {
-      html += `<span class="readable-token">#</span>`;
+      parts.push('<span class="readable-token">#</span>');
       letterRunIndex = 0;
       i += '\\d'.length;
       continue;
     }
+
     if (source.startsWith('\\.', i)) {
-      html += `<span class="readable-token">.</span>`;
+      parts.push('<span class="readable-token">.</span>');
       letterRunIndex = 0;
       i += 2;
       continue;
     }
-    html += `<span class="readable-token">${escapeHtml(source[i])}</span>`;
+
+    parts.push(`<span class="readable-token">${escapeHtml(source[i])}</span>`);
     letterRunIndex = 0;
     i += 1;
   }
-  return html || '<span class="readable-token">(empty)</span>';
+
+  return parts.join('') || '<span class="readable-token">(empty)</span>';
 }
 
 function getActivePatterns() {
   const drawingSource = els.drawingPatternInput.value.trim();
   const revisionSource = els.revisionPatternInput.value.trim();
+
   els.drawingPatternRegex.textContent = drawingSource || '(empty)';
   els.revisionPatternRegex.textContent = revisionSource || '(empty)';
   els.drawingPatternDisplay.innerHTML = readablePatternHtml(drawingSource);
   els.revisionPatternDisplay.innerHTML = readablePatternHtml(revisionSource);
+
   try {
     const drawingPattern = new RegExp(drawingSource, 'i');
     const revisionPattern = new RegExp(revisionSource, 'i');
@@ -197,7 +210,6 @@ function chooseBestMatch(variants, pattern) {
 function extractInfo(text) {
   const { drawingPattern, revisionPattern, valid } = getActivePatterns();
   if (!valid) return { document_number: '', revision: '' };
-
   const variants = ocrTolerantVariants(text);
   return {
     document_number: chooseBestMatch(variants, drawingPattern),

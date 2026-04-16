@@ -6,9 +6,9 @@
   --accent: #0969da;
   --panel: #ffffff;
   --danger: #cf222e;
-  --letter-blue-bg: #dbeafe;
+  --letter-blue-bg: #bfdbfe;
   --letter-blue-text: #1d4ed8;
-  --letter-green-bg: #dcfce7;
+  --letter-green-bg: #bbf7d0;
   --letter-green-text: #15803d;
 }
 * { box-sizing: border-box; }
@@ -44,14 +44,31 @@ th { background: #f0f4f8; }
 code { background: #f0f4f8; padding: 2px 6px; border-radius: 6px; }
 .pattern-preview { margin-top: 12px; display: grid; gap: 8px; }
 .pattern-error { color: var(--danger); font-size: 13px; min-height: 18px; }
-.readable-pattern { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.readable-pattern { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 28px; }
 .letter-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.35);
 }
 .letter-blue { background: var(--letter-blue-bg); color: var(--letter-blue-text); }
 .letter-green { background: var(--letter-green-bg); color: var(--letter-green-text); }
 .readable-token { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+.footer-note {
+  margin-top: 24px;
+  padding: 12px 4px 0;
+  text-align: center;
+}
+.footer-note p {
+  font-size: 13px;
+  color: var(--muted);
+}
 @media (max-width: 900px) {
   .grid { grid-template-columns: 1fr; }
   .controls { grid-template-columns: 140px 1fr 80px; }
