@@ -1,6 +1,6 @@
 # Drawing PDF Splitter
 
-GitHub Pages package with user-editable detection patterns and readable pattern display.
+GitHub Pages package with user-editable detection patterns, readable pattern display, and OCR tolerance.
 
 ## What is included
 - Drawing pattern input
@@ -10,6 +10,7 @@ GitHub Pages package with user-editable detection patterns and readable pattern 
 - Blue/green alternating `Letter` badges for continuous letter groups
 - `#` for digits
 - Raw regex shown underneath
+- OCR tolerance toggle for common mistakes like `O↔0` and `I/l↔1`
 - Reset button to restore default patterns
 - Pattern validation with friendly error message
 - Safer ArrayBuffer handling
@@ -28,4 +29,4 @@ GitHub Pages package with user-editable detection patterns and readable pattern 
 
 ## Notes
 - The PDF must already be searchable.
-- No OCR is included.
+- No OCR is included, but OCR-like misreads can be tolerated when the toggle is enabled.

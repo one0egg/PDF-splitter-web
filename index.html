@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Drawing PDF Splitter</title>
   <link rel="stylesheet" href="./style.css" />
-  <script src="./vendor/pdf-lib.min.js?v=6"></script>
-  <script src="./vendor/jszip.min.js?v=6"></script>
+  <script src="./vendor/pdf-lib.min.js?v=8"></script>
+  <script src="./vendor/jszip.min.js?v=8"></script>
 </head>
 <body>
   <div class="wrap">
@@ -44,9 +44,16 @@
           </div>
           <p class="note">If you need a real special character like <code>.</code> or <code>(</code>, add <code>\</code> before it.</p>
 
+          <div class="toggle-row">
+            <label><input id="ocrToleranceToggle" type="checkbox" checked /> Enable OCR tolerance for similar characters</label>
+          </div>
+          <p class="note">When enabled, common OCR mistakes are corrected where the pattern expects them, such as <code>O→0</code>, <code>I/l→1</code>, and <code>0→O</code>.</p>
+
           <div class="pattern-preview">
-            <div><strong>Currently detecting drawing pattern:</strong> <code id="drawingPatternDisplay">HLY\d{2}-\d{3}-\d{4}</code></div>
-            <div><strong>Currently detecting revision pattern:</strong> <code id="revisionPatternDisplay">[A-Z]\.\d+</code></div>
+            <div><strong>Readable drawing pattern:</strong> <span id="drawingPatternDisplay" class="readable-pattern"></span></div>
+            <div><strong>Readable revision pattern:</strong> <span id="revisionPatternDisplay" class="readable-pattern"></span></div>
+            <div><strong>Regex drawing pattern:</strong> <code id="drawingPatternRegex">HLY\d{2}-\d{3}-\d{4}</code></div>
+            <div><strong>Regex revision pattern:</strong> <code id="revisionPatternRegex">[A-Z]\.\d+</code></div>
             <div id="patternError" class="pattern-error"></div>
           </div>
         </div>
@@ -115,6 +122,6 @@
     </div>
   </div>
 
-  <script type="module" src="./app.js?v=6"></script>
+  <script type="module" src="./app.js?v=8"></script>
 </body>
 </html>

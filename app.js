@@ -1,6 +1,6 @@
-import * as pdfjsLib from './vendor/pdf.min.mjs?v=6';
+import * as pdfjsLib from './vendor/pdf.min.mjs?v=8';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs?v=6', window.location.href).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs?v=8', window.location.href).toString();
 
 const defaultDrawingPattern = 'HLY\\d{2}-\\d{3}-\\d{4}';
 const defaultRevisionPattern = '[A-Z]\\.\\d+';
@@ -28,8 +28,11 @@ const els = {
   revisionPatternInput: document.getElementById('revisionPatternInput'),
   drawingPatternDisplay: document.getElementById('drawingPatternDisplay'),
   revisionPatternDisplay: document.getElementById('revisionPatternDisplay'),
+  drawingPatternRegex: document.getElementById('drawingPatternRegex'),
+  revisionPatternRegex: document.getElementById('revisionPatternRegex'),
   patternError: document.getElementById('patternError'),
-  resetPatternsBtn: document.getElementById('resetPatternsBtn')
+  resetPatternsBtn: document.getElementById('resetPatternsBtn'),
+  ocrToleranceToggle: document.getElementById('ocrToleranceToggle')
 };
 
 let pdfBytes = null;
@@ -67,13 +70,81 @@ function updateRatioLabels() {
   els.bottomRatioVal.textContent = Number(els.bottomRatio.value).toFixed(2);
 }
 
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function readablePatternHtml(source) {
+  let html = '';
+  let i = 0;
+  let letterRunIndex = 0;
+  while (i < source.length) {
+    if (source.startsWith('[A-Z]{', i)) {
+      const match = source.slice(i).match(/^\[A-Z\]\{(\d+)\}/);
+      if (match) {
+        const count = Number(match[1]);
+        for (let n = 0; n < count; n++) {
+          const cls = (letterRunIndex % 2 === 0) ? 'letter-blue' : 'letter-green';
+          html += `<span class="letter-badge ${cls}">Letter</span>`;
+          letterRunIndex += 1;
+        }
+        i += match[0].length;
+        continue;
+      }
+    }
+    if (source.startsWith('[A-Z]', i)) {
+      const cls = (letterRunIndex % 2 === 0) ? 'letter-blue' : 'letter-green';
+      html += `<span class="letter-badge ${cls}">Letter</span>`;
+      letterRunIndex += 1;
+      i += '[A-Z]'.length;
+      continue;
+    }
+    if (source.startsWith('\\d{', i)) {
+      const match = source.slice(i).match(/^\\d\{(\d+)\}/);
+      if (match) {
+        html += `<span class="readable-token">${'#'.repeat(Number(match[1]))}</span>`;
+        letterRunIndex = 0;
+        i += match[0].length;
+        continue;
+      }
+    }
+    if (source.startsWith('\\d+', i)) {
+      html += `<span class="readable-token">#</span>`;
+      letterRunIndex = 0;
+      i += '\\d+'.length;
+      continue;
+    }
+    if (source.startsWith('\\d', i)) {
+      html += `<span class="readable-token">#</span>`;
+      letterRunIndex = 0;
+      i += '\\d'.length;
+      continue;
+    }
+    if (source.startsWith('\\.', i)) {
+      html += `<span class="readable-token">.</span>`;
+      letterRunIndex = 0;
+      i += 2;
+      continue;
+    }
+    html += `<span class="readable-token">${escapeHtml(source[i])}</span>`;
+    letterRunIndex = 0;
+    i += 1;
+  }
+  return html || '<span class="readable-token">(empty)</span>';
+}
+
 function getActivePatterns() {
   const drawingSource = els.drawingPatternInput.value.trim();
   const revisionSource = els.revisionPatternInput.value.trim();
-
-  els.drawingPatternDisplay.textContent = drawingSource || '(empty)';
-  els.revisionPatternDisplay.textContent = revisionSource || '(empty)';
-
+  els.drawingPatternRegex.textContent = drawingSource || '(empty)';
+  els.revisionPatternRegex.textContent = revisionSource || '(empty)';
+  els.drawingPatternDisplay.innerHTML = readablePatternHtml(drawingSource);
+  els.revisionPatternDisplay.innerHTML = readablePatternHtml(revisionSource);
   try {
     const drawingPattern = new RegExp(drawingSource, 'i');
     const revisionPattern = new RegExp(revisionSource, 'i');
@@ -93,15 +164,44 @@ function normalizeText(text) {
     .replace(/\s+/g, '');
 }
 
+function ocrTolerantVariants(text) {
+  let variants = new Set([normalizeText(text)]);
+  if (!els.ocrToleranceToggle.checked) return [...variants];
+
+  const digitMap = { 'O': '0', 'I': '1', 'L': '1' };
+  const letterMap = { '0': 'O', '1': 'I' };
+
+  for (let step = 0; step < 2; step++) {
+    const next = new Set(variants);
+    for (const value of variants) {
+      for (let i = 0; i < value.length; i++) {
+        const ch = value[i];
+        if (digitMap[ch]) next.add(value.slice(0, i) + digitMap[ch] + value.slice(i + 1));
+        if (letterMap[ch]) next.add(value.slice(0, i) + letterMap[ch] + value.slice(i + 1));
+      }
+    }
+    variants = next;
+  }
+
+  return [...variants];
+}
+
+function chooseBestMatch(variants, pattern) {
+  for (const value of variants) {
+    const match = value.match(pattern);
+    if (match) return match[0].toUpperCase();
+  }
+  return '';
+}
+
 function extractInfo(text) {
   const { drawingPattern, revisionPattern, valid } = getActivePatterns();
   if (!valid) return { document_number: '', revision: '' };
-  const cleaned = normalizeText(text);
-  const docMatch = cleaned.match(drawingPattern);
-  const revMatch = cleaned.match(revisionPattern);
+
+  const variants = ocrTolerantVariants(text);
   return {
-    document_number: docMatch ? docMatch[0].toUpperCase() : '',
-    revision: revMatch ? revMatch[0].toUpperCase() : ''
+    document_number: chooseBestMatch(variants, drawingPattern),
+    revision: chooseBestMatch(variants, revisionPattern)
   };
 }
 
@@ -278,15 +378,6 @@ function renderResultTable(rows) {
   `).join('');
 }
 
-function escapeHtml(str) {
-  return String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 function resetPatterns() {
   els.drawingPatternInput.value = defaultDrawingPattern;
   els.revisionPatternInput.value = defaultRevisionPattern;
@@ -321,6 +412,10 @@ for (const el of [els.drawingPatternInput, els.revisionPatternInput]) {
     await refreshPreviewIfLoaded();
   });
 }
+
+els.ocrToleranceToggle.addEventListener('change', async () => {
+  await refreshPreviewIfLoaded();
+});
 
 els.resetPatternsBtn.addEventListener('click', async () => {
   resetPatterns();
