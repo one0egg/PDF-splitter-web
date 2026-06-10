@@ -1,5 +1,7 @@
 # Drawing PDF Splitter
 
+https://one0egg.github.io/PDF-splitter-web/
+
 GitHub Pages package with readable pattern display, OCR tolerance, and footer credit text.
 
 ## What is included
